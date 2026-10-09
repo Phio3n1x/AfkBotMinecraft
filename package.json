@@ -1,0 +1,13 @@
+{
+  "name": "afkbotminecraft-worker",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Mineflayer worker managed by the Python launcher",
+  "main": "worker.js",
+  "scripts": {
+    "start": "node worker.js"
+  },
+  "dependencies": {
+    "mineflayer": "^4.26.0"
+  }
+}
