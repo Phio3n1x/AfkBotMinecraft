@@ -31,8 +31,8 @@ function currentConfig() {
 function startBot(username, locationName, index = 0) {
   if (shuttingDown) return;
   const existing = bots.get(username);
-  if (existing && existing.bot && existing.bot.player) {
-    console.log(`[${username}] Already connected.`);
+  if (existing && existing.bot && ['connecting', 'online', 'leaving'].includes(existing.status)) {
+    console.log(`[${username}] Already ${existing.status}.`);
     return;
   }
   stopping.delete(username);
@@ -112,7 +112,6 @@ function leaveBot(username) {
   if (entry && entry.bot) {
     entry.status = 'leaving';
     entry.bot.quit('Disconnected by terminal command');
-    entry.bot = null;
   } else {
     bots.set(username, { bot: null, status: 'offline', location: null });
     console.log(`[${username}] Already offline.`);
