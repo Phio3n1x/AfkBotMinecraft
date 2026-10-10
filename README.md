@@ -1,18 +1,19 @@
 # AfkBotMinecraft
 
-Interactive Python terminal controller for multiple Minecraft Java Edition AFK clients, using Mineflayer.
+A local web dashboard for managing multiple Minecraft Java Edition AFK clients, powered by Python and Mineflayer.
 
 ## Features
 
-- Live terminal dashboard with bot state, preferred location, uptime, ping, and coordinates when available.
-- Bot status refreshes automatically; last disconnect/error reason is shown when available.
-- Multiple bot sessions and staggered `joinall` connections.
-- Saved locations and per-bot preferred locations.
-- Automatic reconnect support.
+- Responsive dark web UI with live bot statuses, uptime, ping, and coordinates when available.
+- Add bots, connect one or all, and disconnect one or all from the browser.
+- Save locations, assign them to bots, and remove locations.
+- Edit server host, port, Minecraft version, join delay, and reconnect settings.
+- Status updates about once per second.
+- Keeps `main.py` as the optional terminal controller.
 
 ## Target server
 
-The starter configuration targets **Purpur 1.20.1** in offline-mode. Set `version` to `1.20.1` for that server. The project can be configured for other Mineflayer-supported Java versions; compatibility is not universal and needs testing against the target server, proxy, and plugins.
+The starter configuration targets **Purpur 1.20.1** in offline-mode. Set `version` to `1.20.1` for that server. Other Mineflayer-supported Java versions may work, but compatibility should be tested against the target server, proxy, and plugins.
 
 ## Requirements
 
@@ -25,43 +26,31 @@ The starter configuration targets **Purpur 1.20.1** in offline-mode. Set `versio
 1. Download or clone this repository.
 2. Install Node.js 18 or newer.
 3. Open a terminal in the project folder and run `npm install`.
-4. Run `python main.py`. It creates a local `config.json` if one does not exist.
-5. Edit `config.json` to set your server `host`, `port`, and `version` (use `1.20.1` for the target server).
-6. Restart `python main.py` after editing server settings.
+4. Run `python web_panel.py`.
+5. The panel should open in your browser at `http://127.0.0.1:8765`. If it does not, open that address manually.
+6. On first launch, `config.json` is created from `config.example.json`. Set your server `host`, `port`, and `version` in the settings page or edit the file and restart the app.
 
-## Terminal commands
+## Web panel
 
-- `help` — show all commands
-- `config` — show server settings
-- `config version 1.20.1` — select protocol version for new connections
-- `bot add AfkIron` — save a bot username
-- `bots` — show latest runtime statuses, uptime, and coordinates
-- `dashboard` — open the auto-refreshing live dashboard
-- `join AfkIron` — connect one bot
-- `join AfkIron iron` — connect a bot and associate it with a saved location
-- `joinall` — connect all saved bots, staggered by `join_delay_seconds`
-- `leave AfkIron` or `leave all` — disconnect bot(s)
-- `locations add iron 120 64 -35` — save coordinates
-- `locations list` — list saved coordinates
-- `locations remove iron` — remove a saved location
-- `assign AfkIron iron` — remember a bot's preferred location
-- `unassign AfkIron` — clear a bot's preferred location
-- `exit` — stop the worker
+- **Overview:** live bot stats, current bot status, and saved locations.
+- **Bot management:** add bot names, connect bots, connect all saved bots with a delay, disconnect individual bots, or disconnect all.
+- **Farms and locations:** save X/Y/Z coordinates, assign a preferred location to a bot, unassign a bot, and remove locations.
+- **Server settings:** change host, port, version, reconnect behavior, and connection delays.
 
-### Live dashboard
+The web server binds to `127.0.0.1` only by default. This is intentional: the panel has no login system, so do not change the bind address or expose it to a LAN/public network without adding authentication and appropriate access controls. Stop the app with `Ctrl+C` in its terminal.
 
-Type `dashboard` at the `afk>` prompt. The dashboard refreshes about once per second and displays each known bot's status, saved location, online uptime, ping (when available), current coordinates (when spawned), and the most recent error/disconnect note. On Windows, press `q` to return to the command prompt; on other terminals, type `q` and press Enter. You can then keep using the normal commands.
+## Optional terminal controller
 
-The dashboard is read-only: bot management commands are used after returning to the prompt. Position and ping may be blank while a bot is connecting, offline, or before the server has supplied that data.
+Run `python main.py` if you prefer the terminal interface. Commands include `help`, `bot add AfkIron`, `join AfkIron`, `joinall`, `leave all`, `locations add iron 120 64 -35`, `assign AfkIron iron`, and `exit`.
 
 ## Locations and teleporting
 
-Saved locations are labels and coordinate notes. The bot does **not** automatically teleport or pathfind to them; join it, then teleport it using your server's permitted method. If you want a bot chat command after spawn, set `post_join_command` in local `config.json`, e.g. `/tp {name} {x} {y} {z}` only if the bot is permitted to execute that command. Placeholders: `{name}`, `{x}`, `{y}`, `{z}`, `{location}`. Leave this blank by default.
+Saved locations are labels and coordinate notes. Bots do **not** automatically teleport or pathfind to saved coordinates. If you configure `post_join_command` in `config.json`, a chat command can be sent after spawn, e.g. `/tp {name} {x} {y} {z}`, only if the bot is allowed to execute it. For actual autonomous movement, a pathfinding feature needs to be added and tested separately.
 
 ## Notes
 
-- Add and test one bot before increasing the count.
+- Test with one bot before increasing the count.
 - Bot usernames must be unique and acceptable to the server.
-- `config.json` is git-ignored. Do not commit passwords or tokens.
+- `config.json` and `node_modules/` are local and should not be committed.
 - Offline-mode servers may accept arbitrary usernames; only connect to servers you own or are authorized to test.
-- The dashboard/status protocol has been added, but it should still be exercised against your local server and terminal before relying on it for long sessions.
+- The web panel is a new feature and should be tested locally before relying on it for long sessions.
