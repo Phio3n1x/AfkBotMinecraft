@@ -1,15 +1,22 @@
-"""Interactive terminal controller for AFK Minecraft bots."""
+"""Interactive terminal controller and live dashboard for AFK Minecraft bots."""
 from __future__ import annotations
 
 import json
+import os
+import select
+import shutil
 import subprocess
 import sys
+import threading
+import time
 from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parent
 CONFIG_PATH = ROOT / "config.json"
 EXAMPLE_PATH = ROOT / "config.example.json"
+STATUS_LOCK = threading.Lock()
+LATEST_STATUS: dict[str, Any] = {"bots": [], "server": {}}
 
 
 def load_config() -> dict[str, Any]:
@@ -28,6 +35,19 @@ def save_config(config: dict[str, Any]) -> None:
     CONFIG_PATH.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
 
 
+def read_worker_events(stream: Any) -> None:
+    """Read the worker's JSON-only stdout without blocking the command prompt."""
+    global LATEST_STATUS
+    for line in stream:
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if event.get("type") == "status":
+            with STATUS_LOCK:
+                LATEST_STATUS = event
+
+
 def send(worker: subprocess.Popen[str], payload: dict[str, Any]) -> None:
     if worker.stdin is None or worker.poll() is not None:
         print("Bot worker is not running.")
@@ -44,6 +64,7 @@ Commands:
   config version <auto|1.20.1>      Change protocol version (takes effect on next join)
   bot add <name>                    Save a bot username
   bots                              List saved bots and runtime status
+  dashboard                         Open live dashboard (press q to return)
   join <name> [location]             Join one bot; location is optional
   joinall                            Join all saved bots with a delay
   leave <name|all>                   Disconnect one or all bots
@@ -54,14 +75,96 @@ Commands:
   unassign <bot>                     Clear a bot's preferred location
   exit                               Stop all bots and quit
 
-Locations are saved coordinates for reference. By default, bots do not teleport or pathfind;
-you can teleport them manually after joining. If you configure post_join_command in config.json,
-the command is sent as bot chat after spawn. Only use a command your bot is allowed to run.
+Locations are saved coordinates for reference. By default, bots do not teleport or pathfind.
 """)
 
 
+def format_duration(seconds: float | None) -> str:
+    if seconds is None or seconds < 0:
+        return "—"
+    total = int(seconds)
+    hours, rem = divmod(total, 3600)
+    minutes, secs = divmod(rem, 60)
+    return f"{hours:02}:{minutes:02}:{secs:02}"
+
+
+def snapshot() -> dict[str, Any]:
+    with STATUS_LOCK:
+        return json.loads(json.dumps(LATEST_STATUS))
+
+
+def render_dashboard(config: dict[str, Any]) -> None:
+    state = snapshot()
+    server = state.get("server", {})
+    bots = state.get("bots", [])
+    os.system("cls" if os.name == "nt" else "clear")
+    print("=" * 88)
+    print(" AFK BOT MANAGER  |  LIVE DASHBOARD")
+    print("=" * 88)
+    print(f" Server: {server.get('host', config.get('host', '?'))}:{server.get('port', config.get('port', '?'))}"
+          f"   Version: {server.get('version', config.get('version', 'auto'))}")
+    print(f" Updated: {time.strftime('%H:%M:%S')}   Bots: {len(bots)}")
+    print("-" * 88)
+    print(f"{'BOT':<18} {'STATUS':<14} {'LOCATION':<16} {'UPTIME':<10} {'PING':>6}  {'POSITION':<20}")
+    print("-" * 88)
+    if not bots:
+        print("No bot sessions yet. Exit dashboard and use 'bot add <name>' then 'join <name>'.")
+    for bot in bots:
+        pos = bot.get("position")
+        position = "—" if not pos else f"{pos.get('x', 0):.1f}, {pos.get('y', 0):.1f}, {pos.get('z', 0):.1f}"
+        ping = bot.get("ping")
+        ping_text = f"{ping} ms" if isinstance(ping, (int, float)) and ping > 0 else "—"
+        uptime = format_duration(bot.get("uptime_seconds"))
+        print(f"{bot.get('name', '?')[:17]:<18} {bot.get('status', 'unknown')[:13]:<14} "
+              f"{str(bot.get('location') or '—')[:15]:<16} {uptime:<10} {ping_text:>6}  {position:<20}")
+        if bot.get("last_error"):
+            print(f"  Last event/error: {str(bot['last_error'])[:160]}")
+    print("-" * 88)
+    print("Refreshes automatically. Press q then Enter to return to the command prompt.")
+
+
+def dashboard(config: dict[str, Any]) -> None:
+    try:
+        while True:
+            render_dashboard(config)
+            # A short polling loop keeps the display live while allowing q to exit.
+            if os.name == "nt":
+                import msvcrt
+                deadline = time.monotonic() + 1.0
+                pressed_q = False
+                while time.monotonic() < deadline:
+                    if msvcrt.kbhit():
+                        key = msvcrt.getwch()
+                        if key.lower() == "q":
+                            pressed_q = True
+                            break
+                    time.sleep(0.05)
+                if pressed_q:
+                    break
+            else:
+                ready, _, _ = select.select([sys.stdin], [], [], 1.0)
+                if ready and sys.stdin.readline().strip().lower() == "q":
+                    break
+    except (KeyboardInterrupt, OSError):
+        pass
+    print("\nReturned to command prompt.")
+
+
+def print_status() -> None:
+    bots = snapshot().get("bots", [])
+    if not bots:
+        print("No bot sessions yet. Add names with 'bot add <name>', then use join.")
+        return
+    for bot in bots:
+        pos = bot.get("position")
+        pos_text = "—" if not pos else f"x={pos['x']:.1f} y={pos['y']:.1f} z={pos['z']:.1f}"
+        uptime = format_duration(bot.get("uptime_seconds"))
+        print(f"[{bot.get('name')}] {bot.get('status')} | location: {bot.get('location') or '—'}"
+              f" | uptime: {uptime} | pos: {pos_text}")
+
+
 def main() -> int:
-    if not __import__("shutil").which("node"):
+    if not shutil.which("node"):
         print("Node.js 18+ is required. Install Node.js, then try again.", file=sys.stderr)
         return 1
     if not (ROOT / "worker.js").exists():
@@ -79,9 +182,14 @@ def main() -> int:
         ["node", str(ROOT / "worker.js")],
         cwd=ROOT,
         stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=None,
         text=True,
         encoding="utf-8",
+        bufsize=1,
     )
+    assert worker.stdout is not None
+    threading.Thread(target=read_worker_events, args=(worker.stdout,), daemon=True).start()
     print(f"AFK Bot controller ready for {config.get('host')}:{config.get('port')}. Type 'help'.")
     try:
         while worker.poll() is None:
@@ -98,7 +206,11 @@ def main() -> int:
                 help_text()
             elif command == "config":
                 if len(parts) == 3 and parts[1].lower() == "version":
-                    config["version"] = parts[2]
+                    version = parts[2]
+                    if version.lower() not in {"auto", "1.20.1"} and not version[0].isdigit():
+                        print("Version must be 'auto' or a Minecraft version such as '1.20.1'.")
+                        continue
+                    config["version"] = version
                     save_config(config)
                     send(worker, {"action": "config", "config": config})
                     print(f"Version set to {config['version']}; it applies to newly joined bots.")
@@ -116,6 +228,11 @@ def main() -> int:
                     print(f"Saved bot '{name}'. Use: join {name}")
             elif command == "bots":
                 send(worker, {"action": "status"})
+                time.sleep(0.15)
+                print_status()
+            elif command == "dashboard":
+                send(worker, {"action": "status"})
+                dashboard(config)
             elif command == "join" and len(parts) in (2, 3):
                 name = parts[1]
                 location = parts[2] if len(parts) == 3 else config["assignments"].get(name)
