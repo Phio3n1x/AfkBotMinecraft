@@ -195,6 +195,7 @@ def do_action(data: dict[str, Any]) -> dict[str, Any]:
             "reconnect": bool(data.get("reconnect", True)),
             "join_delay_seconds": join_delay,
             "reconnect_delay_seconds": reconnect_delay,
+            "post_join_command": str(data.get("post_join_command", config.get("post_join_command", ""))).strip(),
         })
         save_config(config)
         send_worker({"action": "config", "config": config})
