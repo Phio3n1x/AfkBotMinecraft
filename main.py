@@ -120,7 +120,7 @@ def render_dashboard(config: dict[str, Any]) -> None:
         if bot.get("last_error"):
             print(f"  Last event/error: {str(bot['last_error'])[:160]}")
     print("-" * 88)
-    print("Refreshes automatically. Press q then Enter to return to the command prompt.")
+    print("Refreshes automatically. Press q to return to the command prompt (on non-Windows terminals, press q then Enter).")
 
 
 def dashboard(config: dict[str, Any]) -> None:
